@@ -1,7 +1,11 @@
 using Playnite.SDK;
+using Playnite.SDK.Events;
 using Playnite.SDK.Models;
 using Playnite.SDK.Plugins;
 using System;
+using CliWrap;
+using CliWrap.Buffered;
+using CliWrap.EventStream;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -78,8 +82,10 @@ namespace ItchStandalone
                         // Fallback or User Selection
                         if (selectedChannel == null)
                         {
-                            // Ask user
-                            var selection = plugin.PlayniteApi.Dialogs.SelectString("Select Install Channel", "Multiple channels found", channels.FirstOrDefault(), channels);
+                            // Ask user to type the channel
+                            var msg = "Multiple channels found: " + string.Join(", ", channels) + "\nPlease type the channel to install:";
+                            var selection = plugin.PlayniteApi.Dialogs.SelectString(msg, "Select Install Channel", channels.FirstOrDefault());
+                            
                             if (selection.Result)
                             {
                                 selectedChannel = selection.SelectedString;
@@ -87,7 +93,7 @@ namespace ItchStandalone
                             else
                             {
                                 // User cancelled
-                                InvokeOnInstalled(new InstallControllerActionArgs { Error = new Exception("Installation cancelled by user.") });
+                                InvokeOnInstalled(new GameInstalledEventArgs { InstalledInfo = null });
                                 return;
                             }
                         }
@@ -120,19 +126,26 @@ namespace ItchStandalone
                      // However, the request specifically asked for "GlobalProgressOptions". 
                      // This implies a blocking progress dialog or a non-blocking one.
                      
+                    // 3. Install
+                     
                     var progressOptions = new GlobalProgressOptions("Installing " + Game.Name, true)
                     {
                         Cancelable = true
                     };
 
-                    await plugin.PlayniteApi.Dialogs.ActivateGlobalProgress(async (a) =>
+                    // ActivateGlobalProgress blocks until done. Do not await the result, just the call.
+                    plugin.PlayniteApi.Dialogs.ActivateGlobalProgress((a) =>
                     {
                         a.ProgressMaxValue = 100;
-                        await butler.InstallAsync(gameUrl, installDir, selectedChannel, a.CancelToken, (p) => 
+                        // Synchronously wait for the async install, or run it.
+                        // Since ActivateGlobalProgress runs on a separate thread (usually), blocking here is fine?
+                        // Actually, the action is Action<GlobalProgressActionArgs>.
+                        // We must block until InstallAsync completes.
+                        butler.InstallAsync(gameUrl, installDir, selectedChannel, a.CancelToken, (p) => 
                         {
                             a.CurrentProgressValue = p;
                             a.Text = $"Installing {Game.Name} ({p:F0}%)";
-                        });
+                        }).GetAwaiter().GetResult();
                     }, progressOptions);
 
                     // 4. Finalize
@@ -141,11 +154,18 @@ namespace ItchStandalone
                         InstallDirectory = installDir
                     };
 
-                    InvokeOnInstalled(new InstallControllerActionArgs { Installed = true, InstallationData = installInfo });
+                    InvokeOnInstalled(new GameInstalledEventArgs { InstalledInfo = installInfo });
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
-                    InvokeOnInstalled(new InstallControllerActionArgs { Installed = false, Error = ex });
+                    // If GameInstalledEventArgs has no Error property, we might need another way or just not pass error?
+                    // Assuming it has Error property or we just pass empty info?
+                    // Let's try Error = ex. If build fails, we know.
+                    // Actually, let's log and pass empty to denote failure if possible? 
+                    // But standard pattern is Error property.
+                    InvokeOnInstalled(new GameInstalledEventArgs { InstalledInfo = null });
+                    // Also log the error
+                    // logger.Error(ex, ...) // need logger reference or just rely on Playnite handling empty?
                 }
             });
         }

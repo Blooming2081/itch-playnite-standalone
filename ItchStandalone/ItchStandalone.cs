@@ -31,35 +31,7 @@ namespace ItchStandalone
             };
         }
 
-        public override async IEnumerable<GameMetadata> GetGames(LibraryGetGamesArgs args)
-        {
-            var apiKey = settings.Settings.ApiKey; // SecureString
-            if (apiKey == null || apiKey.Length == 0)
-            {
-                PlayniteApi.Notifications.Add(new NotificationMessage("itch-no-key", "itch.io: API Key is missing. Please configure it in settings.", NotificationType.Error));
-                return new List<GameMetadata>();
-            }
 
-            // Unsecure the string to use in API call (In-memory exposure is inevitable for HTTP)
-            string key = System.Runtime.InteropServices.Marshal.PtrToStringUni(
-                System.Runtime.InteropServices.Marshal.SecureStringToGlobalAllocUnicode(apiKey));
-
-            var client = new ItchApiClient(key);
-            return await client.GetLibraryGamesAsync();
-        }
-
-       // Remove the incorrect override if it exists, or keep it compatible with Playnite SDK version.
-       // Playnite SDK 6.0+ usually has IEnumerable<GameMetadata> GetGames(LibraryGetGamesArgs args)
-       // The previous multi_replace added LibraryGetGamesResult override which might be wrong for the targeted SDK version in csproj (6.0.0).
-       // Ensure we stick to the correct signature. 
-       // NOTE: Playnite SDK 6.2.2 changed to LibraryGetGamesResult. The csproj says 6.0.0. 
-       // Let's assume IEnumerable for 6.0.0. If incorrect, we'll fix.
-       // Actually, I will remove the LibraryGetGamesResult override I added previously to be safe, 
-       // AND update the IEnumerable one to be just valid.
-       
-       // Wait, `GetGames` cannot be async if it returns IEnumerable. 
-       // SDK 6.0: public abstract IEnumerable<GameMetadata> GetGames(LibraryGetGamesArgs args);
-       // So we must run sync or .GetAwaiter().GetResult().
        
         public override IEnumerable<GameMetadata> GetGames(LibraryGetGamesArgs args)
         {
@@ -87,14 +59,20 @@ namespace ItchStandalone
             return client.GetLibraryGamesAsync().GetAwaiter().GetResult();
         }
 
-        public override InstallController GetInstallController(Game game)
+        public override IEnumerable<InstallController> GetInstallActions(GetInstallActionsArgs args)
         {
-            return new ItchInstallController(this, game);
+            if (args.Game.PluginId != Id)
+                yield break;
+
+            yield return new ItchInstallController(this, args.Game);
         }
 
-        public override UninstallController GetUninstallController(Game game)
+        public override IEnumerable<UninstallController> GetUninstallActions(GetUninstallActionsArgs args)
         {
-            return new ItchUninstallController(this, game);
+            if (args.Game.PluginId != Id)
+                yield break;
+
+            yield return new ItchUninstallController(this, args.Game);
         }
 
         public override ISettings GetSettings(bool firstRunSettings)

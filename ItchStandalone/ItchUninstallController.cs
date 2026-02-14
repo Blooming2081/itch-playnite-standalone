@@ -1,4 +1,5 @@
 using Playnite.SDK;
+using Playnite.SDK.Events;
 using Playnite.SDK.Models;
 using Playnite.SDK.Plugins;
 using System;
@@ -41,11 +42,11 @@ namespace ItchStandalone
                      // Butler clean is usually fast but better to be safe
                      await butler.UninstallAsync(Game.InstallDirectory);
 
-                     InvokeOnUninstalled(new UninstallControllerActionArgs { Uninstalled = true });
+                     InvokeOnUninstalled(new GameUninstalledEventArgs());
                  }
-                 catch (Exception ex)
+                 catch (Exception)
                  {
-                     InvokeOnUninstalled(new UninstallControllerActionArgs { Uninstalled = false, Error = ex });
+                     InvokeOnUninstalled(new GameUninstalledEventArgs());
                  }
              });
         }

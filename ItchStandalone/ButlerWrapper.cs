@@ -1,4 +1,5 @@
 using CliWrap;
+using CliWrap.Buffered;
 using CliWrap.EventStream;
 using Newtonsoft.Json.Linq;
 using Playnite.SDK;
